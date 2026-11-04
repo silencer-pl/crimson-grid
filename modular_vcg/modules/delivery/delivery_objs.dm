@@ -85,7 +85,7 @@
 	name = "delivery assignment board"
 	desc = "A board made out of cork where delivery contracts are pinned. Use it with an emtpy hand to see if any are available."
 	icon = 'modular_darkpack/master_files/icons/obj/wallmounts.dmi'
-	icon_state = "noticeboard"
+	icon_state = "notices_2"
 	anchored = 1
 	density = 0
 	var/delivery_started = 0
@@ -115,7 +115,7 @@
 		)
 
 /obj/structure/delivery_board/proc/delivery_icon()
-	icon_state = "nboard02"
+	icon_state = "notices_2"
 	update_icon()
 
 /obj/structure/delivery_board/proc/delivery_cooldown(timer)
@@ -145,7 +145,7 @@
 					switch(contract.delivery.start_contract())
 						if(1)
 							user.put_in_hands(contract)
-							icon_state = "nboard00"
+							icon_state = "noticeboard"
 							update_icon()
 							to_chat(user,span_notice("Success! A new contract was created and aprorpiate items have been created and dispensed. Check the cotnract item for information about your delivery."))
 							contract.manifest.save_data(init = TRUE)
@@ -168,7 +168,7 @@
 		else
 			(to_chat(user,span_notice("A contract was just concluded. There are [time2text((next_delivery_timestamp - world.time),"mm:ss")] left until the next contract can be picked.")))
 	else
-		to_chat(user,span_notice("There are no contracts available."))
+		to_chat(user,span_notice("Someone is already doing a contract for this delivery office, or none are currently available."))
 
 /obj/structure/delivery_board/attackby(obj/item/I, mob/living/user, params)
 	if(istype(I,/obj/item/delivery_contract/))
@@ -319,6 +319,7 @@
 	if(!truck_key) return
 	var/obj/item/vamp/keys/cargo_truck/key_item = truck_key
 	var/obj/structure/delivery_crate/dispensed_crate = new(target_turf)
+	key_item.delivery.active_crates.Add(dispensed_crate)
 	dispensed_crate.crate_type = crate_type
 	dispensed_crate.delivery = key_item.delivery
 	dispensed_crate.source_dispenser = src
@@ -420,45 +421,15 @@
 	. = ..()
 	delivery_trunk = new(src,delivery_capacity)
 
-/obj/darkpack_car/delivery_truck/click_alt(mob/user)
-	var/list/radial_menu_options = list(
-		"Check Cargo Racks" = icon('modular_darkpack/modules/cars/icons/car_actions.dmi', "baggage"),
-	)
-	var/list/passanger_map = list()
-	for(var/mob/living/guy in (passengers + driver))
-		var/guy_name = guy.name
-		radial_menu_options[guy_name] = image(icon = guy, icon_state = guy)
-		passanger_map[guy_name] = guy
-
-	var/pick = show_radial_menu(user, src, radial_menu_options, require_near = TRUE)
-	if(!pick)
-		return
-	if(pick == "Check Cargo Racks")
-		INVOKE_ASYNC(src,PROC_REF(check_rack),user)
-		return CLICK_ACTION_SUCCESS
-	if(locked)
-		to_chat(user, span_warning("[src] is locked!"))
-		return CLICK_ACTION_BLOCKING
-	var/mob/living/occupent = passanger_map[pick]
-	if(!occupent)
-		return CLICK_ACTION_BLOCKING
-
-	user.visible_message(span_warning("[user] begins pulling someone out of [src]!"), \
-		span_warning("You begin pulling [occupent] out of [src]..."))
-	if(do_after(user, 5 SECONDS, src, interaction_key = "doafter_car"))
-		user.visible_message(span_warning("[user] has managed to get [occupent] out of [src]."), \
-			span_warning("You've managed to get [occupent] out of [src]."))
-		empty_occupent(occupent)
-		return CLICK_ACTION_SUCCESS
-	else
-		to_chat(user, span_warning("You've failed to get [occupent] out of [src]."))
-
 /obj/darkpack_car/delivery_truck/attack_hand(mob/user)
 	. = ..()
 	if(locked == TRUE)
 		to_chat(user,span_warning("The truck is locked!"))
 		return
-	if(user.pulling)
+	if(user.pulling == null)
+		check_rack(user)
+		return
+	else
 		var/obj/structure/delivery_crate/pulled_crate = user.pulling
 		if(!pulled_crate)
 			to_chat(user, span_warning("This won't fit on the trucks special cargo racks."))

@@ -84,7 +84,7 @@
 	broadcast_to_holders("<b>Delivery Complete.</b> <b>[final_payout]</b> paid to the accounts of all participants.")
 	for(var/mob/living/carbon/human/payee in contract_takers)
 		var/p_account_id = payee.account_id
-		var/datum/bank_account/payee_account = SSeconomy.bank_accounts_by_id[p_account_id]
+		var/datum/bank_account/payee_account = SSeconomy.bank_accounts_by_id["[p_account_id]"]
 		payee_account.adjust_money(payout_quota,"Delivery Contract Payment")
 
 
@@ -128,6 +128,7 @@
 	if(final_grade < 1) final_grade = 1
 	broadcast_to_holders("Delivery Grade: <b>[parse_grade(final_grade)]</b>")
 	process_payouts(final_grade)
+	board.next_delivery_timestamp = world.time + 5 MINUTES
 	qdel(contract)
 	qdel(src)
 
@@ -423,19 +424,27 @@
 					chosen_tag = crate_to_ret.crate_type
 			if(!picked_crate)
 				var/list/radial_menu_options = list()
-				switch(available_tags)
-					if("red")
-						radial_menu_options["Red Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"red")
-					if("blue")
-						radial_menu_options["Blue Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"blue")
-					if("yellow")
-						radial_menu_options["Yellow Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"yellow")
-					if("green")
-						radial_menu_options["Green Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"green")
+				if(available_tags.Find("red") != 0)
+					radial_menu_options["Red Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"red")
+				if(available_tags.Find("blue") != 0)
+					radial_menu_options["Blue Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"blue")
+				if(available_tags.Find("yellow") != 0)
+					radial_menu_options["Yellow Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"yellow")
+				if(available_tags.Find("green") != 0)
+					radial_menu_options["Green Crate"] = image('modular_vcg/modules/delivery/icons/crate_radial_icons.dmi',"green")
 				chosen_tag = show_radial_menu(user, owner, radial_menu_options, require_near = TRUE)
 			if(!chosen_tag)
 				check_use(2,user)
 				return
+			switch(chosen_tag)
+				if("Red Crate")
+					chosen_tag = "red"
+				if("Blue Crate")
+					chosen_tag = "blue"
+				if("Yellow Crate")
+					chosen_tag = "yellow"
+				if("Green Crate")
+					chosen_tag = "green"
 			for(var/obj/structure/delivery_crate/crate_to_ret in storage)
 				if(crate_to_ret.crate_type == chosen_tag)
 					picked_crate = crate_to_ret
