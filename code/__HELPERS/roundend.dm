@@ -319,6 +319,10 @@ GLOBAL_LIST_INIT(achievements_unlocked, list())
 
 	CHECK_TICK
 
+	//Crimson Grid Edit: Generate Delivery Service Report
+	parts += transportation_report()
+	//Crimson Grid Edit END
+
 	//Antagonists
 	parts += antag_report()
 
