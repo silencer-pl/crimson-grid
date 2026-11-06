@@ -189,8 +189,7 @@
 			picked_dispenser.light_color = "#25eb13"
 			picked_dispenser.set_light(1)
 	delivery_dispensers.Add(picked_dispenser)
-	animate(picked_dispenser,alpha = 255,time = 5 SECONDS)
-	picked_dispenser.mouse_opacity = 1
+	INVOKE_ASYNC(picked_dispenser,TYPE_PROC_REF(/obj/structure/delivery_dispenser/,animation),2)
 	return 1
 
 /datum/delivery_datum/proc/assign_recievers(ammount)
@@ -219,9 +218,7 @@
 			var/picked_type = pick("red","green","yellow","blue")
 			reciever.delivery_status[picked_type] += 1
 			crate_number -= 1
-		animate(reciever,alpha = 255, time = 5 SECONDS)
-		reciever.set_light(2)
-		reciever.mouse_opacity = 1
+		INVOKE_ASYNC(reciever,TYPE_PROC_REF(/obj/structure/delivery_reciever/,animation),2)
 
 /datum/delivery_datum/proc/assign_garage()
 	if(!delivery_employer_tag) return 0
@@ -380,13 +377,13 @@
 
 /datum/delivery_storage/proc/add_to_storage(mob/user,obj/crate)
 	if(storage.len >= capacity)
-		to_chat(user, span_warning("The truck is full!"))
+		crate.balloon_alert(user,"cargo rack full!")
 		return
 	switch(check_use(1,user))
 		if(2)
-			to_chat(user, span_warning("Too many people are using the truck at once."))
+			owner.balloon_alert(user,"cargo rack busy!")
 		if(0)
-			to_chat(user, span_warning("You are already using the truck."))
+			owner.balloon_alert(user,"cargo rack busy!")
 		if(1)
 			storage.Add(crate)
 			crate.forceMove(owner)
@@ -401,10 +398,10 @@
 	if(!user) return
 	switch(check_use(1,user))
 		if(2)
-			to_chat(user, span_warning("Too many people are using the truck at once."))
+			owner.balloon_alert(user,"cargo rack busy!")
 			return
 		if(0)
-			to_chat(user, span_warning("You are already using the truck."))
+			owner.balloon_alert(user,"cargo rack busy!")
 		if(1)
 			var/list/available_tags = list()
 			var/obj/structure/delivery_crate/picked_crate
@@ -543,11 +540,12 @@
 	</head>
 	<body>
 	"}
+	html += "<p><b>AUTOMATED PACKAGE DELIVERY SYSTEM</b><br></p>"
 	html += "<p><b>Current coordinates:</b> X:[user_turf.x] Y:[user_turf.y] Z: [user_turf.z]<br></p>"
 	if(saved_recievers.len == 0)
 		html += "<p><b>No recievers found. Return the truck to the garage and any outstanding crates to their dispensers, then return the contract to the board.</b></p>"
 	else
-		html += "<p><b>OUTSDANDING DELIVERIES</b></p>"
+		html += "<p><b>DELIVERY MANIFEST</b></p>"
 		var/current_position = 1
 		while(current_position <= saved_recievers.len)
 			html += {"<p><b>[saved_recievers["[current_position]"]["chute_name"]]</b> - X:[saved_recievers["[current_position]"]["x"]] Y:[saved_recievers["[current_position]"]["y"]] Z:[saved_recievers["[current_position]"]["z"]]</p><p>"}
@@ -567,6 +565,7 @@
 				var/cargo_name = get_cargo_name("green")
 				var/html_color = get_cargo_color_value("green")
 				html += {"<span style="color: [html_color];">[cargo_name]</span> - <b>[saved_recievers["[current_position]"]["green"]]</b> remaining.<br>"}
+			html += "<p>Delivery information is not updated in real-time. Please visit the issuing APDS terminal to request an updated list.<br></p>"
 			html += "</p>"
 			current_position += 1
 	if(delivery.active_truck)

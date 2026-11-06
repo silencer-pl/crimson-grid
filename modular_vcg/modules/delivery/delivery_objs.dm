@@ -1,10 +1,12 @@
 /obj/item/delivery_contract
-	name = "delivery contract"
-	desc = "A delivery contract issued by a delivery company. Use it in your hand to scan it for details. If your name is on the contract, use it on someone else to add them to it."
-	icon = 'modular_darkpack/modules/masquerade/icons/masquerade_contract.dmi'
-	ONFLOOR_ICON_HELPER('modular_darkpack/modules/masquerade/icons/onfloor.dmi')
-	icon_state = "masquerade"
-	color = "#bbb95c"
+	name = "APDS delivery tablet"
+	desc = "A simple tablet device with a fairly big, but cheap looking screen that displays multi colored text. Comes in a case complete with a small GPS receiver and a compartment with spare RFID enabled keys."
+	icon = 'modular_vcg/modules/delivery/icons/apds.dmi'
+	ONFLOOR_ICON_HELPER('modular_vcg/modules/delivery/icons/apds_floor.dmi')
+	icon_state = "tablet"
+	lefthand_file = 'modular_vcg/modules/delivery/icons/apds_inhand_left.dmi'
+	righthand_file = 'modular_vcg/modules/delivery/icons/apds_inhand_right.dmi'
+	inhand_icon_state = "tablet"
 	var/datum/delivery_datum/delivery
 	var/datum/delivery_manifest/manifest
 
@@ -21,7 +23,7 @@
 	if(!manifest) return "no_manifest"
 	if(M == user)
 		if(delivery.check_owner(user) == 0)
-			to_chat(user, span_warning("You are not listed on this manifest. Before you can use it, one of its owners needs to add you to the crew handling it by using the manifest on you."))
+			user.balloon_alert(user, "no reaction!")
 			return
 		else
 			manifest.read_data(user)
@@ -30,7 +32,7 @@
 		to_chat(user,span_notice("Error: Target mob has no client. This is not a player mob."))
 		return
 	if(delivery.check_owner(user) == 0)
-		to_chat(user,span_warning("You are not listed on this manifest. Before you can use it, one of its owners needs to add you to the crew handling it by using the manifest on you."))
+		user.balloon_alert(user, "no reaction!")
 		return
 	if(delivery.check_owner(user) == 1)
 		if(delivery.check_owner(M) == 0)
@@ -43,7 +45,9 @@
 				to_chat(user, span_notice("Success! User [M] added."))
 			return
 		if(delivery.check_owner(M) == 1)
-			if(delivery.original_owner == M) return
+			if(delivery.original_owner == M)
+				to_chat(user,span_notice("You are the original owner of this Contract and cannot be removed. To finish the delivery early, go back to the office issuing the contract."))
+				return
 			if(delivery.original_owner != user)
 				to_chat(user,span_notice("Only the original owner of the contract, [delivery.original_owner] can remove people from the contract."))
 				return
@@ -66,11 +70,12 @@
 		to_chat(user,span_notice("Error: No delivery datum attached. This is most likely a bug."))
 		return
 	if(!manifest) return "no_manifest"
-
 	if(delivery.check_owner(user) == 0)
-		to_chat(user, span_warning("You are not listed on this manifest. Before you can use it, one of its owners needs to add you to the crew handling it by using the manifest on you."))
+		user.balloon_alert(user, "no reaction!")
+		return
 	else
-		manifest.read_data(user)
+		if(do_after(user, 2 SECONDS, src, interaction_key = "doafter_apdstablet"))
+			manifest.read_data(user)
 	. = ..()
 
 
@@ -81,11 +86,12 @@
 
 
 /obj/structure/delivery_board
-	color = "#ffb171"
-	name = "delivery assignment board"
-	desc = "A board made out of cork where delivery contracts are pinned. Use it with an emtpy hand to see if any are available."
-	icon = 'modular_darkpack/master_files/icons/obj/wallmounts.dmi'
-	icon_state = "notices_2"
+	name = "APDS delivery system terminal"
+	desc = "A bulky, noisy monitor screen with a very simple small keyboard and docking port for a tablet device."
+	icon = 'modular_vcg/modules/delivery/icons/apds_terminal.dmi'
+	icon_state = "terminal_on"
+	var/free_icon = "terminal_on"
+	var/busy_icon = "terminal_off"
 	anchored = 1
 	density = 0
 	var/delivery_started = 0
@@ -115,7 +121,7 @@
 		)
 
 /obj/structure/delivery_board/proc/delivery_icon()
-	icon_state = "notices_2"
+	icon_state = free_icon
 	update_icon()
 
 /obj/structure/delivery_board/proc/delivery_cooldown(timer)
@@ -145,7 +151,7 @@
 					switch(contract.delivery.start_contract())
 						if(1)
 							user.put_in_hands(contract)
-							icon_state = "noticeboard"
+							icon_state = busy_icon
 							update_icon()
 							to_chat(user,span_notice("Success! A new contract was created and aprorpiate items have been created and dispensed. Check the cotnract item for information about your delivery."))
 							contract.manifest.save_data(init = TRUE)
@@ -170,51 +176,53 @@
 	else
 		to_chat(user,span_notice("Someone is already doing a contract for this delivery office, or none are currently available."))
 
-/obj/structure/delivery_board/attackby(obj/item/I, mob/living/user, params)
-	if(istype(I,/obj/item/delivery_contract/))
-		var/obj/item/delivery_contract/contract_item = I
-		if(contract_item.delivery.delivery_employer_tag != delivery_employer_tag)
-			to_chat(user,span_warning("This contract does not seem to be from this board."))
-			return
-		if(contract_item.delivery.check_owner(user) == 0)
-			to_chat(user,span_warning("You don't seem to be on this contract. Only the person who signed the cotract can add you."))
-			return
-		if(contract_item.delivery.delivery_recievers.len == 0)
-			if(get_area(contract_item.delivery.active_truck) != contract_item.delivery.garage_area)
-				to_chat(user,span_warning("Warning: Truck outside of garage area."))
-			if(tgui_alert(user,"Do you wish to finalize the contract?","Finalize Confirm",list("Yes","No"),timeout = 10 SECONDS) == "Yes")
-				contract_item.delivery.delivery_finish()
-				return
-		if(tgui_alert(user,"Do you wish to update the information on the contract?","Contract Update",list("Yes","No"),timeout = 10 SECONDS) == "Yes")
-			contract_item.manifest.save_data()
-			return
+/obj/structure/delivery_board/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(istype(tool, /obj/item/delivery_contract/))
+		return try_contract(user, tool) ? ITEM_INTERACT_SUCCESS : ITEM_INTERACT_BLOCKING
+	if(istype(tool, /obj/item/vamp/keys/cargo_truck))
+		return try_contract(user, tool) ? ITEM_INTERACT_SUCCESS : ITEM_INTERACT_BLOCKING
+	return NONE
+
+/obj/structure/delivery_board/proc/try_contract(mob/living/user,obj/item/delivery_contract/contract_item)
+	if(contract_item.delivery.delivery_employer_tag != delivery_employer_tag)
+		to_chat(user,span_warning("This contract does not seem to be from this board."))
+		return
+	if(contract_item.delivery.check_owner(user) == 0)
+		to_chat(user,span_warning("You don't seem to be on this contract. Only the person who signed the cotract can add you."))
+		return
+	if(contract_item.delivery.delivery_recievers.len == 0)
 		if(get_area(contract_item.delivery.active_truck) != contract_item.delivery.garage_area)
 			to_chat(user,span_warning("Warning: Truck outside of garage area."))
-		if(tgui_alert(user,"Do you wish to finalize the contract early?","Finalize Confirm",list("Yes","No"),timeout = 10 SECONDS) == "Yes")
+		if(tgui_alert(user,"Do you wish to finalize the contract?","Finalize Confirm",list("Yes","No"),timeout = 10 SECONDS) == "Yes")
 			contract_item.delivery.delivery_finish()
 			return
+	if(tgui_alert(user,"Do you wish to update the information on the contract?","Contract Update",list("Yes","No"),timeout = 10 SECONDS) == "Yes")
+		contract_item.manifest.save_data()
+		return
+	if(get_area(contract_item.delivery.active_truck) != contract_item.delivery.garage_area)
+		to_chat(user,span_warning("Warning: Truck outside of garage area."))
+	if(tgui_alert(user,"Do you wish to finalize the contract early?","Finalize Confirm",list("Yes","No"),timeout = 10 SECONDS) == "Yes")
+		contract_item.delivery.delivery_finish()
+		return
 
-	if(istype(I,/obj/item/vamp/keys/cargo_truck))
-		var/obj/item/vamp/keys/cargo_truck/truck_keys = I
-		if(truck_keys.delivery.delivery_employer_tag != delivery_employer_tag)
-			to_chat(user,span_warning("These keys dont's eem to be oes not seem to be from this board."))
-			return
-		if(tgui_alert(user,"Are you SURE you want to respawn the delivery truck? This will reduce your final grade.","Respawn Truck", list("Yes","No"), timeout = 10 SECONDS) == "Yes")
-			var/obj/old_truck = truck_keys.delivery.active_truck
-			var/obj/effect/landmark/delivery_truck_beacon/truck_beacon = truck_keys.delivery.truck_spawner
-			qdel(old_truck)
-			truck_beacon.spawn_truck(truck_keys.delivery)
-	. = ..()
-
+/obj/structure/delivery_board/proc/try_keys(mob/living/user,obj/item/vamp/keys/cargo_truck/truck_keys)
+	if(truck_keys.delivery.delivery_employer_tag != delivery_employer_tag)
+		src.balloon_alert(user, "no reaction!")
+		return
+	if(tgui_alert(user,"Are you SURE you want to respawn the delivery truck? This will reduce your final grade.","Respawn Truck", list("Yes","No"), timeout = 10 SECONDS) == "Yes")
+		var/obj/old_truck = truck_keys.delivery.active_truck
+		var/obj/effect/landmark/delivery_truck_beacon/truck_beacon = truck_keys.delivery.truck_spawner
+		qdel(old_truck)
+		truck_beacon.spawn_truck(truck_keys.delivery)
 
 /obj/structure/delivery_reciever
 
-	name = "delivery chute"
-	desc = "A chute used to handle bulk deliveries. A standard shipping crate should slide right in."
+	name = "APDS delivery rack"
+	desc = "A discrete delivery rack and RFID chip scanner connected to the APDS system. Supposedly, these chutes automatically open and process any standard crate with an APDS RFID chip once a delivery is complete."
 	anchored = 1
 	density = 0
-	icon = 'modular_darkpack/modules/cargo/icons/box.dmi'
-	icon_state = "box_put"
+	icon = 'modular_vcg/modules/delivery/icons/rack.dmi'
+	icon_state = "rack_on"
 	var/chute_name = "default"
 	var/delivery_in_use = 0
 	var/reciever_in_use = 0
@@ -227,6 +235,29 @@
 	light_color = "#ffffff"
 	light_power = 2
 
+/obj/structure/delivery_reciever/proc/animation(type)
+	if(!type) return
+	switch(type)
+		if(1)
+			mouse_opacity = 0
+			icon_state = "rack_down"
+			update_icon()
+			sleep(5)
+			set_light(0)
+			icon_state = "rack_off"
+			update_icon()
+			animate(src, alpha = 0, time = 5 SECONDS)
+		if(2)
+			mouse_opacity = 1
+			animate(src,alpha = 255,time = 5 SECONDS)
+			sleep(5 SECONDS)
+			icon_state = "rack_up"
+			update_icon()
+			sleep(5)
+			icon_state = "rack_on"
+			update_icon()
+			set_light(2)
+
 /obj/structure/delivery_reciever/proc/reset_reciever()
 	delivery_in_use = 0
 	delivery_status = list(
@@ -235,9 +266,7 @@
 		"yellow" = 0,
 		"green" = 0,
 		)
-	animate(src, alpha = 0, time = 5 SECONDS)
-	mouse_opacity = 0
-	set_light(0)
+	INVOKE_ASYNC(src,PROC_REF(animation),1)
 
 /obj/structure/delivery_reciever/proc/check_deliveries()
 	if(delivery_status["red"] != 0 || delivery_status["blue"] != 0 || delivery_status["yellow"] != 0 || delivery_status["green"] != 0) return 0
@@ -247,6 +276,7 @@
 	. = ..()
 	alpha = 0
 	mouse_opacity = 0
+	icon_state = "rack_off"
 	GLOB.delivery_available_recievers.Add(src)
 	name = "[initial(name)] - [capitalize(chute_name)]"
 
@@ -257,13 +287,14 @@
 /obj/structure/delivery_reciever/attack_hand(mob/living/user)
 	. = ..()
 	if(reciever_in_use == 1)
-		to_chat(user, span_warning("Someone is already operating this reciever!"))
+		src.balloon_alert(user, "in use!")
+		return
 	if(user.pulling)
 		if(delivery_in_use == 0) return
 		if(istype(user.pulling,/obj/structure/delivery_crate/))
 			var/obj/structure/delivery_crate/pulled_crate = user.pulling
 			if(pulled_crate.delivery.check_owner(user) == 0)
-				to_chat(user, span_warning("You aren't authorized to handle this delivery. For security reasons, the reciever denies the package."))
+				balloon_alert(user, "no reaction!")
 				return
 			reciever_in_use = 1
 			playsound(src,'modular_vcg/modules/delivery/sounds/cargocrate_move.ogg',50,10)
@@ -282,12 +313,12 @@
 
 /obj/structure/delivery_dispenser
 
-	name = "Cargo Dispenser"
-	desc = "A chute used to handle bulk deliveries. There is a visible keyhole and a small button to push."
+	name = "APDS Cargo Dispenser"
+	desc = "A chute-based dispenser connected to the APDS system. Has a small RFID scanner located right bellow a colored light bulb. Using a key with a valid APDS RFID chip should activate the dispenser. It also looks like it should be possible to feed crates back into the device."
 	anchored = 1
 	density = 0
-	icon = 'modular_darkpack/modules/cargo/icons/box.dmi'
-	icon_state = "box_take"
+	icon = 'modular_vcg/modules/delivery/icons/dispenser.dmi'
+	icon_state = "dispenser_on"
 	var/chute_name = "default"
 	var/dispenser_active = 0
 	var/dispenser_in_use
@@ -299,6 +330,8 @@
 /obj/structure/delivery_dispenser/Initialize()
 	. = ..()
 	GLOB.delivery_available_dispensers.Add(src)
+	icon_state = "dispenser_off"
+	update_icon()
 	alpha = 0
 	mouse_opacity = 0
 	name = "[initial(name)] - [capitalize(chute_name)]]"
@@ -307,13 +340,33 @@
 	. = ..()
 	GLOB.delivery_available_dispensers.Remove(src)
 
+/obj/structure/delivery_dispenser/proc/animation(type)
+	if(!type) return
+	switch(type)
+		if(1)
+			mouse_opacity = 0
+			light_color = initial(light_color)
+			set_light(0)
+			icon_state = "dispenser_down"
+			update_icon()
+			sleep(5)
+			icon_state = "dispenser_off"
+			update_icon()
+			animate(src,alpha = 0,5 SECONDS)
+		if(2)
+			mouse_opacity = 1
+			animate(src,alpha = 255,time = 5 SECONDS)
+			sleep(5 SECONDS)
+			icon_state = "dispenser_up"
+			update_icon()
+			sleep(5)
+			icon_state = "dispenser_on"
+			update_icon()
+
 /obj/structure/delivery_dispenser/proc/reset_dispenser()
 	dispenser_active = 0
 	crate_type = null
-	light_color = initial(light_color)
-	set_light(0)
-	animate(src,alpha = 0,5 SECONDS)
-	mouse_opacity = 0
+	INVOKE_ASYNC(src,PROC_REF(animation),1)
 
 /obj/structure/delivery_dispenser/proc/dispense_cargo(obj/truck_key, turf/target_turf)
 	if(!truck_key) return
@@ -336,10 +389,10 @@
 		to_chat(user, span_notice("The device seems to be offline."))
 		return
 	if(dispenser_in_use == 1)
-		to_chat(user, span_warning("Someone is already using this dispenser!"))
+		src.balloon_alert(user, "in use!")
 		return
 	if(user.pulling == null)
-		to_chat(user, span_notice("It appears that you need to use a key to operate this dispenser. If you are on a delivery, use the key you got when you signed up or were added to the contract."))
+		to_chat(user, span_notice("The dispenser only reacts to keys and other devices with an active APDS RFID chip."))
 		return
 	if(user.pulling != null)
 		if(istype(user.pulling, /obj/structure/delivery_crate))
@@ -353,34 +406,36 @@
 					qdel(pulled_crate)
 				dispenser_in_use = 0
 
-/obj/structure/delivery_dispenser/attackby(obj/item/I, mob/living/user, params)
-	. = ..()
+/obj/structure/delivery_dispenser/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(istype(tool, /obj/item/vamp/keys/cargo_truck))
+		return try_dispense(user, tool) ? ITEM_INTERACT_SUCCESS : ITEM_INTERACT_BLOCKING
+	return NONE
+
+/obj/structure/delivery_dispenser/proc/try_dispense(mob/living/user, obj/item/vamp/keys/cargo_truck/truck_key)
 	if(dispenser_in_use == 1)
-		to_chat(user, span_warning("Someone is already using this dispenser!"))
+		src.balloon_alert(user, "in use!")
 		return
-	if(istype(I,/obj/item/vamp/keys/cargo_truck))
-		var/obj/item/vamp/keys/cargo_truck/truck_key = I
-		if(truck_key.delivery == null)
-			to_chat(user,span_warning("Error, delivery data missing. This is a bug."))
+	if(truck_key.delivery == null)
+		to_chat(user,span_warning("Error, delivery data missing. This is a bug."))
+		return
+	if(truck_key.delivery.delivery_dispensers.Find(src) == 0)
+		src.balloon_alert(user, "no reaction!")
+		return
+	var/turf/user_turf = get_turf(user)
+	for(var/obj/structure/delivery_crate/potential_crate in user_turf.contents)
+		if(potential_crate)
+			src.balloon_alert(user, "ground full!")
 			return
-		if(truck_key.delivery.delivery_dispensers.Find(src) == 0)
-			to_chat(user,span_notice("They key does not seem to work in this dispenser."))
-			return
-		var/turf/user_turf = get_turf(user)
-		for(var/obj/structure/delivery_crate/potential_crate in user_turf.contents)
-			if(potential_crate)
-				to_chat(user, span_warning("There is already a crate on the ground here!"))
-				return
-		dispenser_in_use = 1
-		playsound(src,'modular_vcg/modules/delivery/sounds/cargocrate_move.ogg',50,10)
-		if(do_after(user, 2 SECONDS, src))
-			dispense_cargo(truck_key,user_turf)
-		dispenser_in_use = 0
+	dispenser_in_use = 1
+	playsound(src,'modular_vcg/modules/delivery/sounds/cargocrate_move.ogg',50,10)
+	if(do_after(user, 2 SECONDS, src))
+		dispense_cargo(truck_key,user_turf)
+	dispenser_in_use = 0
 
 /obj/structure/delivery_crate
 
-	name = "delivery crate"
-	desc = "A sealed crate, ready for transport and delivery."
+	name = "APDS delivery crate"
+	desc = "A securely sealed bulky crate with a built-in RFID chip that's part of the APDS system. A small tag on the side gives a generic description of its contents, but seems to contain only random strings of letters sand numbers otherwise. Likely heavier than its actual contents."
 	anchored = 0
 	density = 1
 	icon = 'modular_darkpack/master_files/icons/obj/storage/crates32x32.dmi'
@@ -401,8 +456,8 @@
 	. = ..()
 
 /obj/darkpack_car/delivery_truck
-	name = "delivery truck"
-	desc = "A truck with specially prepared racks in the back allowing for easy storage and retrieval of delivery packages."
+	name = "APDS delivery truck"
+	desc = "A modified truck, with most of its storage occupied by special automated racks connected to a automated controller and an RFID reader system, all tied to the APDS system. Provided the truck is unlocked, crates can be fed and retrieved from the system with relative ease."
 	icon_state = "track"
 	max_passengers = 4
 	var/delivery_capacity = 20
@@ -424,7 +479,7 @@
 /obj/darkpack_car/delivery_truck/attack_hand(mob/user)
 	. = ..()
 	if(locked == TRUE)
-		to_chat(user,span_warning("The truck is locked!"))
+		src.balloon_alert(user, "closed!")
 		return
 	if(user.pulling == null)
 		check_rack(user)
@@ -432,7 +487,7 @@
 	else
 		var/obj/structure/delivery_crate/pulled_crate = user.pulling
 		if(!pulled_crate)
-			to_chat(user, span_warning("This won't fit on the trucks special cargo racks."))
+			src.balloon_alert(user, "no room!")
 			return
 		else
 			playsound(src,'modular_vcg/modules/delivery/sounds/cargocrate_move.ogg',50,10)
@@ -442,12 +497,12 @@
 
 /obj/darkpack_car/delivery_truck/proc/check_rack(mob/user)
 	if(delivery_trunk.storage.len == 0)
-		to_chat(user, span_notice("There is nothing in the back of the truck."))
+		src.balloon_alert(user, "empty!")
 		return
 	var/turf/user_turf = get_turf(user)
 	for(var/obj/structure/delivery_crate/potential_crate in user_turf.contents)
 		if(potential_crate)
-			to_chat(user, span_warning("There is already a crate on the ground here!"))
+			src.balloon_alert(user, "no room!")
 			return
 	delivery_trunk.retrieval_menu(user)
 
@@ -494,6 +549,8 @@
 	. = ..()
 
 /obj/item/vamp/keys/cargo_truck
+	name = "APDS delivery truck key"
+	desc = "A somewhat bulky key with an embedded RFID chip."
 
 	var/datum/delivery_datum/delivery
 	var/mob/living/owner
